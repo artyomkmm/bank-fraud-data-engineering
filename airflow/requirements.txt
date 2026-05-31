@@ -1,0 +1,5 @@
+Faker==37.1.0
+psycopg2-binary==2.9.10
+clickhouse-connect==0.8.18
+dbt-core==1.8.9
+dbt-clickhouse==1.8.7

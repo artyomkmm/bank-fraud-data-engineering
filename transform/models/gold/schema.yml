@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: customer_360
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+  - name: daily_transaction_summary
+  - name: mcc_risk_enriched_transactions
+  - name: pipeline_operations_dashboard

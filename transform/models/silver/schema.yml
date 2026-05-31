@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: dim_customer
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+  - name: dim_account
+    columns:
+      - name: account_id
+        tests: [unique, not_null]
+  - name: dim_card
+    columns:
+      - name: card_id
+        tests: [unique, not_null]
+  - name: fact_transaction
+    columns:
+      - name: trx_id
+        tests: [unique, not_null]
+  - name: fact_app_session
+    columns:
+      - name: session_id
+        tests: [unique, not_null]
+  - name: fact_app_event
+    columns:
+      - name: event_id
+        tests: [unique, not_null]

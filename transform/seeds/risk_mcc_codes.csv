@@ -1,0 +1,11 @@
+mcc_code,mcc_category,risk_weight
+5411,Grocery,15
+5812,Restaurants,20
+4111,Transport,25
+6011,ATM Cash,55
+6012,Financial Institution,40
+7995,Gambling,95
+7801,Online Gaming,85
+4829,Wire Transfer,75
+5944,Jewelry,60
+5732,Electronics,45

@@ -1,0 +1,33 @@
+name: rbk_dwh
+version: 1.0.0
+config-version: 2
+profile: rbk_dwh
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+seeds:
+  rbk_dwh:
+    +schema: reference
+    +tags: ["reference"]
+
+snapshots:
+  rbk_dwh:
+    +target_schema: silver
+    +tags: ["scd2"]
+
+models:
+  rbk_dwh:
+    silver:
+      +schema: silver
+      +tags: ["silver"]
+      +materialized: table
+    gold:
+      +schema: gold
+      +tags: ["gold"]
+      +materialized: table

@@ -1,0 +1,279 @@
+version: "3.9"
+
+services:
+  crm_db:
+    image: postgres:15
+    container_name: crm_db
+    environment:
+      POSTGRES_DB: crm_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./sql/crm:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d crm_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  core_banking_db:
+    image: postgres:15
+    container_name: core_banking_db
+    environment:
+      POSTGRES_DB: core_banking_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./sql/core:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d core_banking_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  card_processing_db:
+    image: postgres:15
+    container_name: card_processing_db
+    environment:
+      POSTGRES_DB: card_processing_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./sql/cards:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d card_processing_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  transactions_db:
+    image: postgres:15
+    container_name: transactions_db
+    environment:
+      POSTGRES_DB: transactions_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5436:5432"
+    volumes:
+      - ./sql/transactions:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transactions_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mobile_app_db:
+    image: postgres:15
+    container_name: mobile_app_db
+    environment:
+      POSTGRES_DB: mobile_app_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5437:5432"
+    volumes:
+      - ./sql/mobile:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mobile_app_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  clickhouse_dwh:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clickhouse_dwh
+    environment:
+      CLICKHOUSE_DB: bronze
+      CLICKHOUSE_USER: app
+      CLICKHOUSE_PASSWORD: clickhouse_rbk
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user app --password clickhouse_rbk --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  airflow_meta_db:
+    image: postgres:15
+    container_name: airflow_meta_db
+    environment:
+      POSTGRES_DB: airflow_db
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    ports:
+      - "5445:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  airflow_init:
+    build: ./airflow
+    container_name: airflow_init
+    depends_on:
+      airflow_meta_db:
+        condition: service_healthy
+      crm_db:
+        condition: service_healthy
+      core_banking_db:
+        condition: service_healthy
+      card_processing_db:
+        condition: service_healthy
+      transactions_db:
+        condition: service_healthy
+      mobile_app_db:
+        condition: service_healthy
+      clickhouse_dwh:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_meta_db:5432/airflow_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__WEBSERVER__SECRET_KEY: dev_only_secret_key
+      CRM_DB_HOST: crm_db
+      CRM_DB_PORT: 5432
+      CORE_DB_HOST: core_banking_db
+      CORE_DB_PORT: 5432
+      CARDS_DB_HOST: card_processing_db
+      CARDS_DB_PORT: 5432
+      TRANSACTIONS_DB_HOST: transactions_db
+      TRANSACTIONS_DB_PORT: 5432
+      MOBILE_DB_HOST: mobile_app_db
+      MOBILE_DB_PORT: 5432
+      CLICKHOUSE_HOST: clickhouse_dwh
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: app
+      CLICKHOUSE_PASSWORD: clickhouse_rbk
+      PYTHONPATH: /opt/project/scripts
+    user: "50000:0"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/project/scripts
+      - ./transform:/opt/project/transform
+      - ./data:/opt/project/data
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate && \
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin
+
+  airflow_webserver:
+    build: ./airflow
+    container_name: airflow_webserver
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+      crm_db:
+        condition: service_healthy
+      core_banking_db:
+        condition: service_healthy
+      card_processing_db:
+        condition: service_healthy
+      transactions_db:
+        condition: service_healthy
+      mobile_app_db:
+        condition: service_healthy
+      clickhouse_dwh:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_meta_db:5432/airflow_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__WEBSERVER__SECRET_KEY: dev_only_secret_key
+      CRM_DB_HOST: crm_db
+      CRM_DB_PORT: 5432
+      CORE_DB_HOST: core_banking_db
+      CORE_DB_PORT: 5432
+      CARDS_DB_HOST: card_processing_db
+      CARDS_DB_PORT: 5432
+      TRANSACTIONS_DB_HOST: transactions_db
+      TRANSACTIONS_DB_PORT: 5432
+      MOBILE_DB_HOST: mobile_app_db
+      MOBILE_DB_PORT: 5432
+      CLICKHOUSE_HOST: clickhouse_dwh
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: app
+      CLICKHOUSE_PASSWORD: clickhouse_rbk
+      PYTHONPATH: /opt/project/scripts
+    user: "50000:0"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/project/scripts
+      - ./transform:/opt/project/transform
+      - ./data:/opt/project/data
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow_scheduler:
+    build: ./airflow
+    container_name: airflow_scheduler
+    depends_on:
+      airflow_init:
+        condition: service_completed_successfully
+      crm_db:
+        condition: service_healthy
+      core_banking_db:
+        condition: service_healthy
+      card_processing_db:
+        condition: service_healthy
+      transactions_db:
+        condition: service_healthy
+      mobile_app_db:
+        condition: service_healthy
+      clickhouse_dwh:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_meta_db:5432/airflow_db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      CRM_DB_HOST: crm_db
+      CRM_DB_PORT: 5432
+      CORE_DB_HOST: core_banking_db
+      CORE_DB_PORT: 5432
+      CARDS_DB_HOST: card_processing_db
+      CARDS_DB_PORT: 5432
+      TRANSACTIONS_DB_HOST: transactions_db
+      TRANSACTIONS_DB_PORT: 5432
+      MOBILE_DB_HOST: mobile_app_db
+      MOBILE_DB_PORT: 5432
+      CLICKHOUSE_HOST: clickhouse_dwh
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_USER: app
+      CLICKHOUSE_PASSWORD: clickhouse_rbk
+      PYTHONPATH: /opt/project/scripts
+    user: "50000:0"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/project/scripts
+      - ./transform:/opt/project/transform
+      - ./data:/opt/project/data
+    command: scheduler
